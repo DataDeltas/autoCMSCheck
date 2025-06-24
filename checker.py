@@ -3,6 +3,7 @@ import os
 import re
 import base64
 import requests
+import random
 from datetime import datetime
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
@@ -151,12 +152,22 @@ class PostProcessor:
         uuid_pattern = r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
         return bool(re.match(uuid_pattern, post_id, re.IGNORECASE))
 
-    def get_unprocessed_id(self):
-        """Get an unprocessed post ID from the list."""
+    def get_unprocessed_batch(self):
+        """Get a random batch of 3-4 unprocessed post IDs."""
         unprocessed = [post_id for post_id in self.all_post_ids if post_id not in self.processed_ids]
         logger.info(f"Progress: {len(self.processed_ids)}/{len(self.all_post_ids)} posts processed")
         logger.info(f"Remaining: {len(unprocessed)} posts")
-        return unprocessed[0] if unprocessed else None
+        
+        if not unprocessed:
+            return []
+        
+        # Randomly select 3 or 4 IDs
+        batch_size = random.choice([3, 4])
+        batch_size = min(batch_size, len(unprocessed))  # Don't exceed available IDs
+        
+        batch = random.sample(unprocessed, batch_size)
+        logger.info(f"Selected batch of {len(batch)} IDs: {batch}")
+        return batch
 
     @retry(
         stop=stop_after_attempt(3),
@@ -180,7 +191,7 @@ class PostProcessor:
             logger.info(f"Successfully processed post ID: {post_id}")
             return True
         elif response.status_code in [401, 403] or "Login" in response.url:
-            logger.warning("Session expired, attempting to re-authenticate")
+            logger.warning(f"Session expired while processing {post_id}, attempting to re-authenticate")
             if self.login():
                 return self.process_post(post_id)  # Retry after re-authentication
             else:
@@ -190,19 +201,47 @@ class PostProcessor:
             logger.error(f"Failed to process post ID {post_id}: {response.status_code} - {response.text[:100]}")
             return False
 
-    def save_processed_id(self, post_id):
-        """Save processed ID to GitHub."""
-        self.processed_ids.add(post_id)
+    def process_batch(self, post_ids):
+        """Process a batch of post IDs."""
+        successful_ids = []
+        failed_ids = []
+        
+        logger.info(f"Processing batch of {len(post_ids)} posts...")
+        
+        for post_id in post_ids:
+            if self.process_post(post_id):
+                successful_ids.append(post_id)
+            else:
+                failed_ids.append(post_id)
+        
+        logger.info(f"Batch processing completed: {len(successful_ids)} successful, {len(failed_ids)} failed")
+        
+        if failed_ids:
+            logger.warning(f"Failed to process IDs: {failed_ids}")
+        
+        return successful_ids, failed_ids
+
+    def save_processed_ids(self, post_ids):
+        """Save multiple processed IDs to GitHub."""
+        # Add to local set
+        self.processed_ids.update(post_ids)
+        
+        # Download current file
         content, sha = self.download_file_from_github(PROCESSED_FILE)
         processed_list = [line.strip() for line in content.split('\n') if line.strip()] if content.strip() else []
-        if post_id not in processed_list:
-            processed_list.append(post_id)
+        
+        # Add new IDs that aren't already in the list
+        for post_id in post_ids:
+            if post_id not in processed_list:
+                processed_list.append(post_id)
+        
+        # Upload updated list
         all_processed = '\n'.join(processed_list)
         return self.upload_file_to_github(PROCESSED_FILE, all_processed, sha)
 
     def run(self):
         """Main processing logic."""
-        logger.info(f"Starting Post Processor at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        logger.info(f"Starting Batch Post Processor at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         logger.info(f"Using GitHub repo: {REPO_NAME}")
 
         # Login
@@ -214,31 +253,38 @@ class PostProcessor:
         self.load_processed_ids()
         self.load_post_ids()
 
-        # Get an unprocessed post ID
-        post_id = self.get_unprocessed_id()
-        if not post_id:
+        # Get a batch of unprocessed post IDs
+        post_ids_batch = self.get_unprocessed_batch()
+        if not post_ids_batch:
             logger.info("All posts have been processed!")
             return True
 
-        logger.info(f"Processing post ID: {post_id}")
+        logger.info(f"Processing batch of {len(post_ids_batch)} post IDs: {post_ids_batch}")
 
-        # Process the post
-        if self.process_post(post_id):
-            if self.save_processed_id(post_id):
-                logger.info("Processing completed successfully!")
-                return True
+        # Process the batch
+        successful_ids, failed_ids = self.process_batch(post_ids_batch)
+        
+        # Save successful IDs
+        if successful_ids:
+            if self.save_processed_ids(successful_ids):
+                logger.info(f"Successfully processed and saved {len(successful_ids)} post IDs!")
             else:
-                logger.error("Post processed but failed to save to GitHub")
+                logger.error(f"Posts processed but failed to save {len(successful_ids)} IDs to GitHub")
                 return False
-        else:
-            logger.error("Processing failed")
+        
+        # Report results
+        if failed_ids:
+            logger.warning(f"Processing completed with {len(failed_ids)} failures")
             return False
+        else:
+            logger.info("Batch processing completed successfully!")
+            return True
 
 def main():
     try:
         processor = PostProcessor()
         if not processor.run():
-            logger.error("Post processor failed")
+            logger.error("Batch post processor completed with errors")
             exit(1)
     except Exception as e:
         logger.error(f"Unexpected error: {e}", exc_info=True)
