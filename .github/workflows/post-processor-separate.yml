@@ -55,13 +55,14 @@ jobs:
 
     - name: Run post processor
       env:
-        GITHUB_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+        PERSONAL_ACCESS_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
         ROOBTECH_EMAIL: ${{ secrets.ROOBTECH_EMAIL }}
         ROOBTECH_PASSWORD: ${{ secrets.ROOBTECH_PASSWORD }}
-        USER AGENT: ${{ secrets.USER_AGENT || 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36' }}
+        USER_AGENT: ${{ secrets.USER_AGENT || 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36' }}
         LOGIN_URL: ${{ vars.LOGIN_URL || 'https://roobtech.com/Account/Login' }}
         API_URL: ${{ vars.API_URL || 'https://roobtech.com/ProjectAnnotation/PostChecked' }}
         PROJECT_ID: ${{ vars.PROJECT_ID || '1e879af5-ca76-477f-a83d-e22d890ca984' }}
+        REPO_NAME: ${{ vars.REPO_NAME || 'DataDeltas/qcAuto' }}
       run: python checker.py
 
     - name: Check if should continue and schedule next run
