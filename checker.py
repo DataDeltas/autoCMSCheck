@@ -23,7 +23,7 @@ LOGIN_DATA = {
     "RememberMe": "true"
 }
 GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
-GITHUB_REPO = os.environ.get("GITHUB_REPOSITORY", "DataDeltas/qcAuto")
+GITHUB_REPO = os.environ.get("DataDeltas/qcAuto")
 POST_IDS_FILE = "postIds.txt"
 PROCESSED_FILE = "processed_so_far.txt"
 USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36"
