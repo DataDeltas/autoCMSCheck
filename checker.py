@@ -26,7 +26,7 @@ GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
 GITHUB_REPO = os.environ.get("GITHUB_REPOSITORY", "DataDeltas/qcAuto")
 POST_IDS_FILE = "postIds.txt"
 PROCESSED_FILE = "processed_so_far.txt"
-USER_AGENT = os.environ.get("USER_AGENT")
+USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36"
 
 class PostProcessor:
     def __init__(self):
@@ -35,7 +35,7 @@ class PostProcessor:
         self.processed_ids = set()
         self.all_post_ids = []
         # Validate required environment variables
-        required_vars = ["ROOBTECH_EMAIL", "ROOBTECH_PASSWORD", "GITHUB_TOKEN", "USER_AGENT", "LOGIN_URL", "API_URL", "PROJECT_ID"]
+        required_vars = ["ROOBTECH_EMAIL", "ROOBTECH_PASSWORD", "GITHUB_TOKEN", "LOGIN_URL", "API_URL", "PROJECT_ID"]
         missing_vars = [var for var in required_vars if not os.environ.get(var)]
         if missing_vars:
             logger.error(f"Missing required environment variables: {', '.join(missing_vars)}")
