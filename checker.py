@@ -35,7 +35,7 @@ class PostProcessor:
         self.processed_ids = set()
         self.all_post_ids = []
         # Validate required environment variables
-        required_vars = ["ROOBTECH_EMAIL", "ROOBTECH_PASSWORD", "GITHUB_TOKEN", "LOGIN_URL", "API_URL", "PROJECT_ID"]
+        required_vars = ["ROOBTECH_EMAIL", "ROOBTECH_PASSWORD", "PERSONAL_ACCESS_TOKEN", "LOGIN_URL", "API_URL", "PROJECT_ID"]
         missing_vars = [var for var in required_vars if not os.environ.get(var)]
         if missing_vars:
             logger.error(f"Missing required environment variables: {', '.join(missing_vars)}")
