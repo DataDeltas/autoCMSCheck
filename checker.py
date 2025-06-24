@@ -22,7 +22,7 @@ LOGIN_DATA = {
     "Password": os.environ.get("ROOBTECH_PASSWORD"),
     "RememberMe": "true"
 }
-GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
+GITHUB_TOKEN = os.environ.get("PERSONAL_ACCESS_TOKEN")
 GITHUB_REPO = os.environ.get("DataDeltas/qcAuto")
 POST_IDS_FILE = "postIds.txt"
 PROCESSED_FILE = "processed_so_far.txt"
