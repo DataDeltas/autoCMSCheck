@@ -23,7 +23,7 @@ LOGIN_DATA = {
     "RememberMe": "true"
 }
 GITHUB_TOKEN = os.environ.get("PERSONAL_ACCESS_TOKEN")
-GITHUB_REPO = os.environ.get("DataDeltas/qcAuto")
+REPO_NAME = os.environ.get("REPO_NAME", "DataDeltas/qcAuto")  # Fixed: proper env var with default
 POST_IDS_FILE = "postIds.txt"
 PROCESSED_FILE = "processed_so_far.txt"
 USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36"
@@ -65,7 +65,7 @@ class PostProcessor:
     )
     def download_file_from_github(self, filename):
         """Download file content from GitHub repository."""
-        url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{filename}"
+        url = f"https://api.github.com/repos/{REPO_NAME}/contents/{filename}"
         headers = {
             "Authorization": f"token {GITHUB_TOKEN}",
             "Accept": "application/vnd.github.v3+json"
@@ -94,7 +94,7 @@ class PostProcessor:
     )
     def upload_file_to_github(self, filename, content, sha=None):
         """Upload file to GitHub repository."""
-        url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{filename}"
+        url = f"https://api.github.com/repos/{REPO_NAME}/contents/{filename}"
         headers = {
             "Authorization": f"token {GITHUB_TOKEN}",
             "Accept": "application/vnd.github.v3+json"
@@ -203,7 +203,7 @@ class PostProcessor:
     def run(self):
         """Main processing logic."""
         logger.info(f"Starting Post Processor at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-        logger.info(f"Using GitHub repo: {GITHUB_REPO}")
+        logger.info(f"Using GitHub repo: {REPO_NAME}")
 
         # Login
         if not self.login():
