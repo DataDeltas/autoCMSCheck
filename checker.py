@@ -3,7 +3,6 @@ import os
 import re
 import base64
 import requests
-import random
 from datetime import datetime
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
@@ -153,20 +152,25 @@ class PostProcessor:
         return bool(re.match(uuid_pattern, post_id, re.IGNORECASE))
 
     def get_unprocessed_batch(self):
-        """Get a random batch of 3-4 unprocessed post IDs."""
-        unprocessed = [post_id for post_id in self.all_post_ids if post_id not in self.processed_ids]
+        """Get the next sequential batch of 3-4 unprocessed post IDs from the beginning."""
+        unprocessed = []
+        
+        # Go through all_post_ids in order and find unprocessed ones
+        for post_id in self.all_post_ids:
+            if post_id not in self.processed_ids:
+                unprocessed.append(post_id)
+        
         logger.info(f"Progress: {len(self.processed_ids)}/{len(self.all_post_ids)} posts processed")
         logger.info(f"Remaining: {len(unprocessed)} posts")
         
         if not unprocessed:
             return []
         
-        # Randomly select 3 or 4 IDs
-        batch_size = random.choice([3, 4])
-        batch_size = min(batch_size, len(unprocessed))  # Don't exceed available IDs
+        # Take the first 3-4 unprocessed IDs (sequential from beginning)
+        batch_size = min(4, len(unprocessed))  # Take up to 4 IDs, or all remaining if less than 4
         
-        batch = random.sample(unprocessed, batch_size)
-        logger.info(f"Selected batch of {len(batch)} IDs: {batch}")
+        batch = unprocessed[:batch_size]
+        logger.info(f"Selected sequential batch of {len(batch)} IDs from beginning: {batch}")
         return batch
 
     @retry(
@@ -241,7 +245,7 @@ class PostProcessor:
 
     def run(self):
         """Main processing logic."""
-        logger.info(f"Starting Batch Post Processor at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        logger.info(f"Starting Sequential Post Processor at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         logger.info(f"Using GitHub repo: {REPO_NAME}")
 
         # Login
@@ -253,13 +257,13 @@ class PostProcessor:
         self.load_processed_ids()
         self.load_post_ids()
 
-        # Get a batch of unprocessed post IDs
+        # Get a batch of unprocessed post IDs (sequential from beginning)
         post_ids_batch = self.get_unprocessed_batch()
         if not post_ids_batch:
             logger.info("All posts have been processed!")
             return True
 
-        logger.info(f"Processing batch of {len(post_ids_batch)} post IDs: {post_ids_batch}")
+        logger.info(f"Processing sequential batch of {len(post_ids_batch)} post IDs: {post_ids_batch}")
 
         # Process the batch
         successful_ids, failed_ids = self.process_batch(post_ids_batch)
@@ -277,14 +281,14 @@ class PostProcessor:
             logger.warning(f"Processing completed with {len(failed_ids)} failures")
             return False
         else:
-            logger.info("Batch processing completed successfully!")
+            logger.info("Sequential batch processing completed successfully!")
             return True
 
 def main():
     try:
         processor = PostProcessor()
         if not processor.run():
-            logger.error("Batch post processor completed with errors")
+            logger.error("Sequential post processor completed with errors")
             exit(1)
     except Exception as e:
         logger.error(f"Unexpected error: {e}", exc_info=True)
