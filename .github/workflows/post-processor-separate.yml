@@ -17,7 +17,7 @@ on:
       sleep_duration_seconds:
         description: 'Delay between runs in seconds'
         required: false
-        default: '120'
+        default: '100'
         type: string
 
   # Triggered by the workflow itself for subsequent runs
