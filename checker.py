@@ -167,7 +167,7 @@ class PostProcessor:
             return []
         
         # Take the first 3-4 unprocessed IDs (sequential from beginning)
-        batch_size = min(8, len(unprocessed))  # Take up to 4 IDs, or all remaining if less than 4
+        batch_size = min(5, len(unprocessed))  # Take up to 4 IDs, or all remaining if less than 4
         
         batch = unprocessed[:batch_size]
         logger.info(f"Selected sequential batch of {len(batch)} IDs from beginning: {batch}")
