@@ -1,14 +1,8 @@
 name: Post Processor - Separate Runs
 
 on:
-  # Manual trigger to start the process
   workflow_dispatch:
     inputs:
-      duration_hours:
-        description: 'Duration in hours'
-        required: true
-        default: '4'
-        type: string
       max_runs:
         description: 'Maximum number of runs'
         required: false
@@ -17,17 +11,21 @@ on:
       sleep_duration_seconds:
         description: 'Delay between runs in seconds'
         required: false
-        default: '118'
+        default: '100'
+        type: string
+      duration_hours:
+        description: 'Maximum duration in hours (optional, set to 0 to ignore)'
+        required: false
+        default: '0'
         type: string
 
-  # Triggered by the workflow itself for subsequent runs
   repository_dispatch:
     types: [trigger-next-run]
 
 jobs:
   process-single-post:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10  # Increased to account for processing + delay
     outputs:
       current_run: ${{ steps.session-info.outputs.current_run }}
       elapsed_minutes: ${{ steps.session-info.outputs.elapsed_minutes }}
@@ -39,7 +37,7 @@ jobs:
         token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
 
     - name: Set up Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: '3.9'
 
@@ -47,6 +45,7 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install requests tenacity
+      timeout-minutes: 2
 
     - name: Configure git
       run: |
@@ -63,20 +62,24 @@ jobs:
         API_URL: ${{ vars.API_URL || 'https://roobtech.com/ProjectAnnotation/PostChecked' }}
         PROJECT_ID: ${{ vars.PROJECT_ID || '1e879af5-ca76-477f-a83d-e22d890ca984' }}
         REPO_NAME: ${{ vars.REPO_NAME || 'DataDeltas/qcAuto' }}
-      run: python checker.py
+      run: |
+        echo "Starting checker.py at $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+        python checker.py
+        echo "Finished checker.py at $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+      timeout-minutes: 3  # Assuming checker.py takes ~2 minutes
 
     - name: Check if should continue and schedule next run
       id: session-info
       env:
         GITHUB_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
-        SLEEP_DURATION: ${{ github.event.inputs.sleep_duration_seconds || '180' }}
+        SLEEP_DURATION: ${{ github.event.inputs.sleep_duration_seconds || '100' }}
       run: |
         # Validate or create session file
         if [ ! -f "session_info.txt" ]; then
-          echo "$(date +%s)" > session_info.txt
+          echo "$(date -u +%s)" > session_info.txt
           echo "1" >> session_info.txt
           CURRENT_RUN=1
-          START_TIME=$(date +%s)
+          START_TIME=$(date -u +%s)
         else
           START_TIME=$(sed -n '1p' session_info.txt)
           CURRENT_RUN=$(sed -n '2p' session_info.txt)
@@ -92,9 +95,10 @@ jobs:
         echo "$START_TIME" > session_info.txt
         echo "$CURRENT_RUN" >> session_info.txt
 
-        # Git operations with error handling
+        # Git operations with retry
         for i in {1..3}; do
           if git add session_info.txt && git commit -m "Update session - Run #$CURRENT_RUN" && git push; then
+            echo "✓ Successfully updated session_info.txt"
             break
           else
             echo "⚠️ Git operation failed (attempt $i)" >&2
@@ -106,24 +110,24 @@ jobs:
           fi
         done
 
-        CURRENT_TIME=$(date +%s)
+        CURRENT_TIME=$(date -u +%s)
         ELAPSED=$((CURRENT_TIME - START_TIME))
-        DURATION_HOURS="${{ github.event.inputs.duration_hours || '4' }}"
-        MAX_DURATION=$((DURATION_HOURS * 3600))
         MAX_RUNS="${{ github.event.inputs.max_runs || '120' }}"
+        DURATION_HOURS="${{ github.event.inputs.duration_hours || '0' }}"
+        MAX_DURATION=$((DURATION_HOURS * 3600))
 
         echo "----------------------------------------"
         echo "Session Info:"
         echo "Run: $CURRENT_RUN of $MAX_RUNS"
-        echo "Elapsed: $((ELAPSED / 60)) minutes of $((MAX_DURATION / 60)) minutes"
-        echo "Processing time per run: ~2 minutes, then ${{ github.event.inputs.sleep_duration_seconds || '118' }}s delay before next run"
+        echo "Elapsed: $((ELAPSED / 60)) minutes"
+        echo "Processing time per run: ~2 minutes, then ${SLEEP_DURATION}s delay"
         echo "----------------------------------------"
 
-        # Set outputs for visibility
+        # Set outputs
         echo "current_run=$CURRENT_RUN" >> $GITHUB_OUTPUT
         echo "elapsed_minutes=$((ELAPSED / 60))" >> $GITHUB_OUTPUT
 
-        # Check for running workflows to prevent race conditions
+        # Check for running workflows
         RUNNING_WORKFLOWS=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
           -H "Accept: application/vnd.github.v3+json" \
           "https://api.github.com/repos/${{ github.repository }}/actions/runs?status=in_progress" | \
@@ -134,48 +138,48 @@ jobs:
         fi
 
         # Check if session should continue
-        if [ $ELAPSED -lt $MAX_DURATION ] && [ $CURRENT_RUN -lt $MAX_RUNS ]; then
-          echo "Scheduling next run in $SLEEP_DURATION seconds..."
-          echo "Note: Previous run completed 2-minute processing, now waiting $SLEEP_DURATION seconds before next run"
+        if [ "$DURATION_HOURS" -eq 0 ] || [ $ELAPSED -lt $MAX_DURATION ]; then
+          if [ $CURRENT_RUN -lt $MAX_RUNS ]; then
+            echo "Scheduling next run in $SLEEP_DURATION seconds..."
+            sleep $SLEEP_DURATION
 
-          # Wait before triggering next run
-          sleep $SLEEP_DURATION
-
-          # Trigger next run with retry logic
-          for i in {1..3}; do
-            RESPONSE=$(curl -s -w "%{http_code}" -X POST \
-              -H "Authorization: token $GITHUB_TOKEN" \
-              -H "Accept: application/vnd.github.v3+json" \
-              "https://api.github.com/repos/${{ github.repository }}/dispatches" \
-              -d '{"event_type":"trigger-next-run"}')
-            STATUS_CODE=${RESPONSE: -3}
-            if [ "$STATUS_CODE" == "204" ]; then
-              echo "✓ Successfully triggered next run"
-              break
-            else
-              echo "⚠️ Failed to trigger next run (attempt $i): HTTP $STATUS_CODE"
-              sleep $((2 ** i))
-            fi
-            if [ $i -eq 3 ]; then
-              echo "Error: Failed to trigger next run after 3 attempts" >&2
-              exit 1
-            fi
-          done
+            # Trigger next run with retry
+            for i in {1..3}; do
+              RESPONSE=$(curl -s -w "%{http_code}" -X POST \
+                -H "Authorization: token $GITHUB_TOKEN" \
+                -H "Accept: application/vnd.github.v3+json" \
+                "https://api.github.com/repos/${{ github.repository }}/dispatches" \
+                -d '{"event_type":"trigger-next-run"}')
+              STATUS_CODE=${RESPONSE: -3}
+              if [ "$STATUS_CODE" == "204" ]; then
+                echo "✓ Successfully triggered next run"
+                break
+              else
+                echo "⚠️ Failed to trigger next run (attempt $i): HTTP $STATUS_CODE" >&2
+                if [ $i -eq 3 ]; then
+                  echo "Error: Failed to trigger next run after 3 attempts" >&2
+                  exit 1
+                fi
+                sleep $((2 ** i))
+              fi
+            done
+          else
+            echo "Session completed! Max runs ($MAX_RUNS) reached."
+            echo "Total runs: $CURRENT_RUN"
+            echo "Total time: $((ELAPSED / 60)) minutes"
+            # Optionally archive session file instead of deleting
+            mv session_info.txt session_info_$(date -u +%Y%m%d_%H%M%S).txt
+            git add session_info_*.txt
+            git commit -m "Archive session info - $CURRENT_RUN runs completed" || true
+            git push || true
+          fi
         else
-          echo "Session completed!"
+          echo "Session completed! Max duration ($DURATION_HOURS hours) reached."
           echo "Total runs: $CURRENT_RUN"
           echo "Total time: $((ELAPSED / 60)) minutes"
-          # Clean up session file
-          for i in {1..3}; do
-            if git rm session_info.txt && git commit -m "End session - $CURRENT_RUN runs completed" && git push; then
-              break
-            else
-              echo "⚠️ Failed to clean up session file (attempt $i)" >&2
-              if [ $i -eq 3 ]; then
-                echo "Error: Failed to clean up session_info.txt after 3 attempts" >&2
-                exit 1
-              fi
-              sleep $((2 ** i))
-            fi
-          done
+          mv session_info.txt session_info_$(date -u +%Y%m%d_%H%M%S).txt
+          git add session_info_*.txt
+          git commit -m "Archive session info - $CURRENT_RUN runs completed" || true
+          git push || true
         fi
+      timeout-minutes: 3
