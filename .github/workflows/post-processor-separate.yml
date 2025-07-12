@@ -17,7 +17,7 @@ on:
       sleep_duration_seconds:
         description: 'Delay between runs in seconds'
         required: false
-        default: '180'
+        default: '118'
         type: string
 
   # Triggered by the workflow itself for subsequent runs
@@ -116,7 +116,7 @@ jobs:
         echo "Session Info:"
         echo "Run: $CURRENT_RUN of $MAX_RUNS"
         echo "Elapsed: $((ELAPSED / 60)) minutes of $((MAX_DURATION / 60)) minutes"
-        echo "Processing time per run: ~2 minutes + ${{ github.event.inputs.sleep_duration_seconds || '180' }}s delay"
+        echo "Processing time per run: ~2 minutes, then ${{ github.event.inputs.sleep_duration_seconds || '118' }}s delay before next run"
         echo "----------------------------------------"
 
         # Set outputs for visibility
@@ -136,7 +136,7 @@ jobs:
         # Check if session should continue
         if [ $ELAPSED -lt $MAX_DURATION ] && [ $CURRENT_RUN -lt $MAX_RUNS ]; then
           echo "Scheduling next run in $SLEEP_DURATION seconds..."
-          echo "Note: Each run takes ~2 minutes for processing + $SLEEP_DURATION seconds delay"
+          echo "Note: Previous run completed 2-minute processing, now waiting $SLEEP_DURATION seconds before next run"
 
           # Wait before triggering next run
           sleep $SLEEP_DURATION
