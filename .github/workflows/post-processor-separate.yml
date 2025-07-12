@@ -17,7 +17,7 @@ on:
       sleep_duration_seconds:
         description: 'Delay between runs in seconds'
         required: false
-        default: '100'
+        default: '180'
         type: string
 
   # Triggered by the workflow itself for subsequent runs
@@ -27,7 +27,7 @@ on:
 jobs:
   process-single-post:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 5
     outputs:
       current_run: ${{ steps.session-info.outputs.current_run }}
       elapsed_minutes: ${{ steps.session-info.outputs.elapsed_minutes }}
@@ -69,7 +69,7 @@ jobs:
       id: session-info
       env:
         GITHUB_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
-        SLEEP_DURATION: ${{ github.event.inputs.sleep_duration_seconds || '120' }}
+        SLEEP_DURATION: ${{ github.event.inputs.sleep_duration_seconds || '180' }}
       run: |
         # Validate or create session file
         if [ ! -f "session_info.txt" ]; then
@@ -116,6 +116,7 @@ jobs:
         echo "Session Info:"
         echo "Run: $CURRENT_RUN of $MAX_RUNS"
         echo "Elapsed: $((ELAPSED / 60)) minutes of $((MAX_DURATION / 60)) minutes"
+        echo "Processing time per run: ~2 minutes + ${{ github.event.inputs.sleep_duration_seconds || '180' }}s delay"
         echo "----------------------------------------"
 
         # Set outputs for visibility
@@ -135,6 +136,7 @@ jobs:
         # Check if session should continue
         if [ $ELAPSED -lt $MAX_DURATION ] && [ $CURRENT_RUN -lt $MAX_RUNS ]; then
           echo "Scheduling next run in $SLEEP_DURATION seconds..."
+          echo "Note: Each run takes ~2 minutes for processing + $SLEEP_DURATION seconds delay"
 
           # Wait before triggering next run
           sleep $SLEEP_DURATION
