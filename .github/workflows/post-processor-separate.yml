@@ -6,7 +6,7 @@ on:
       max_runs:
         description: 'Maximum number of runs'
         required: false
-        default: '120'
+        default: '12000'
         type: string
       sleep_duration_seconds:
         description: 'Delay between runs in seconds'
