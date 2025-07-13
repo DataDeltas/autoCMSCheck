@@ -3,8 +3,6 @@ import os
 import re
 import base64
 import requests
-import random
-import time
 from datetime import datetime
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
@@ -154,7 +152,7 @@ class PostProcessor:
         return bool(re.match(uuid_pattern, post_id, re.IGNORECASE))
 
     def get_unprocessed_batch(self):
-        """Get the next sequential batch of 5-8 unprocessed post IDs from the beginning."""
+        """Get the next sequential batch of 3-4 unprocessed post IDs from the beginning."""
         unprocessed = []
         
         # Go through all_post_ids in order and find unprocessed ones
@@ -168,10 +166,8 @@ class PostProcessor:
         if not unprocessed:
             return []
         
-        # Randomly select batch size between 5-8
-        batch_size = random.randint(5, 8)
-        # Take up to batch_size IDs, or all remaining if less than batch_size
-        batch_size = min(batch_size, len(unprocessed))
+        # Take the first 3-4 unprocessed IDs (sequential from beginning)
+        batch_size = min(8, len(unprocessed))  # Take up to 4 IDs, or all remaining if less than 4
         
         batch = unprocessed[:batch_size]
         logger.info(f"Selected sequential batch of {len(batch)} IDs from beginning: {batch}")
@@ -210,72 +206,24 @@ class PostProcessor:
             return False
 
     def process_batch(self, post_ids):
-        """Process a batch of post IDs spread over 2 minutes with random delays."""
+        """Process a batch of post IDs."""
         successful_ids = []
         failed_ids = []
         
-        logger.info(f"Processing batch of {len(post_ids)} posts over 2 minutes...")
+        logger.info(f"Processing batch of {len(post_ids)} posts...")
         
-        # Calculate time distribution for 2 minutes (120 seconds)
-        total_time = 120  # 2 minutes in seconds
-        num_requests = len(post_ids)
-        
-        # Generate random delays that sum to approximately 2 minutes
-        delays = self.generate_random_delays(num_requests, total_time)
-        
-        start_time = time.time()
-        
-        for i, post_id in enumerate(post_ids):
-            logger.info(f"Processing request {i+1}/{num_requests}: {post_id}")
-            
+        for post_id in post_ids:
             if self.process_post(post_id):
                 successful_ids.append(post_id)
-                logger.info(f"✓ Request {i+1} successful")
             else:
                 failed_ids.append(post_id)
-                logger.warning(f"✗ Request {i+1} failed")
-            
-            # Wait before next request (except for the last one)
-            if i < len(post_ids) - 1:
-                delay = delays[i]
-                logger.info(f"Waiting {delay:.1f} seconds before next request...")
-                time.sleep(delay)
         
-        elapsed_time = time.time() - start_time
-        logger.info(f"Batch processing completed in {elapsed_time:.1f} seconds: {len(successful_ids)} successful, {len(failed_ids)} failed")
+        logger.info(f"Batch processing completed: {len(successful_ids)} successful, {len(failed_ids)} failed")
         
         if failed_ids:
             logger.warning(f"Failed to process IDs: {failed_ids}")
         
         return successful_ids, failed_ids
-    
-    def generate_random_delays(self, num_requests, total_time):
-        """Generate random delays between requests that sum to approximately total_time."""
-        if num_requests <= 1:
-            return []
-        
-        # We need (num_requests - 1) delays between requests
-        num_delays = num_requests - 1
-        
-        # Generate random weights
-        weights = [random.uniform(0.5, 2.0) for _ in range(num_delays)]
-        weight_sum = sum(weights)
-        
-        # Scale weights to sum to total_time
-        delays = [(w / weight_sum) * total_time for w in weights]
-        
-        # Add some randomness while keeping within reasonable bounds
-        final_delays = []
-        for delay in delays:
-            # Add ±20% randomness but keep delays between 5-30 seconds
-            randomized_delay = delay * random.uniform(0.8, 1.2)
-            final_delay = max(5, min(30, randomized_delay))
-            final_delays.append(final_delay)
-        
-        logger.info(f"Generated delays (seconds): {[f'{d:.1f}' for d in final_delays]}")
-        logger.info(f"Total estimated time: {sum(final_delays):.1f} seconds")
-        
-        return final_delays
 
     def save_processed_ids(self, post_ids):
         """Save multiple processed IDs to GitHub."""
